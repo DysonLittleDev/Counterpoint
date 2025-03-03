@@ -11,14 +11,41 @@ class Score:
         for track in self.trackArray:
             self.melodyArray.append(Melody.fromMidiTrack(track))
 
+    def testFailures(self, melodyComparisonTuple):
 
+        failureArray = []
+
+        melody1 = self.melodyArray[melodyComparisonTuple[0]]
+        melody2 = self.melodyArray[melodyComparisonTuple[1]]
+
+        for chord in melody1.chordArray:
+            otherChord = melody2.getAtTime(chord.time)
+
+            comparison = chord.notes[0].compare(otherChord.notes[0])
+
+            #Test for rule 0
+
+            if not (comparison == Note.NoteRelationship.UNISON_OR_OCTAVE
+                or comparison == Note.NoteRelationship.MAJOR_THIRD
+                or comparison == Note.NoteRelationship.MINOR_THIRD
+                or comparison == Note.NoteRelationship.MAJOR_SIXTH
+                or comparison == Note.NoteRelationship.MINOR_SIXTH
+                or comparison == Note.NoteRelationship.PERFECT_FIFTH):
+                failureArray.append((CounterpointFailureType.INTERVAL_NOT_CONSONANT_FAILURE, chord.time))
+
+        #test other rules lol
+
+        return failureArray
 
 
 class Melody:
 
-    def __init__(self, noteArray):
+    def __init__(self, chordArray):
 
-        self.noteArray = noteArray
+        self.chordArray = chordArray
+
+    def getAtTime(self, time):
+        return next((x for x in self.chordArray if x.time == time), None)
 
     @classmethod
     def fromMidiTrack(cls, track):
@@ -77,6 +104,8 @@ class Chord:
         self.time = time
         self.duration = duration
 
+    def isParallel(self, other):
+        return self.time == other.time and self.duration == other.duration
 
 
     # these are for time
@@ -88,7 +117,7 @@ class Chord:
 
 class Note:
     class NoteRelationship(Enum):
-        UNISON = 0
+        UNISON_OR_OCTAVE = 0
         MINOR_SECOND = 1
         MAJOR_SECOND = 2
         MINOR_THIRD = 3
@@ -110,8 +139,8 @@ class Note:
         return Note.NoteRelationship((self.value - other.value) % 12)
 
 class CounterpointFailureType(Enum):
-    INTERVAL_NOT_CONSONANT = 0
-    COUNTERMELODY_LAST_NOTE_NOT_TONIC = 1
+    INTERVAL_NOT_CONSONANT_FAILURE = 0
+    COUNTERMELODY_LAST_NOTE_NOT_TONIC_FAILURE = 1
     PARALLEL_FIFTH_FAILURE = 2
     PARALLEL_OCTAVE_FAILURE = 3
     DIRECT_OCTAVE_OR_FIFTH_FAILURE = 4

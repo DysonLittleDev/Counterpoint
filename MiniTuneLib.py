@@ -18,12 +18,16 @@ class Score:
         melody1 = self.melodyArray[melodyComparisonTuple[0]]
         melody2 = self.melodyArray[melodyComparisonTuple[1]]
 
+        cache_previous_chord_tuple = ()
+
         for chord in melody1.chordArray:
             otherChord = melody2.getAtTime(chord.time)
 
             comparison = chord.notes[0].compare(otherChord.notes[0])
 
             #Test for rule 0
+            #The interval between the given note and the note in your counter - melody should be consonant(major / minor
+            #3rd or 6th, perfect unison, 5th, or octave, or a compound form).
 
             if not (comparison == Note.NoteRelationship.UNISON_OR_OCTAVE
                 or comparison == Note.NoteRelationship.MAJOR_THIRD
@@ -33,7 +37,73 @@ class Score:
                 or comparison == Note.NoteRelationship.PERFECT_FIFTH):
                 failureArray.append((CounterpointFailureType.INTERVAL_NOT_CONSONANT_FAILURE, chord.time))
 
-        #test other rules lol
+            #Test for rule 1
+            #If the counter - melody is above the given melody, then the last note of the counter - melody should
+            #be in the tonic chord. If the counter - melody is below the given melody, then the last note of the
+            #counter - melody should be the tonic or third of the tonic chord.
+
+            #Test for rule 2 & 3
+
+            #Parallel fifths: if the previous harmonic interval was a fifth,
+            # your next note should not create the same harmonic interval again.
+            #Parallel octaves: if the previous harmonic interval was an octave,
+            # your next note should not create the same harmonic interval again.
+
+            previous_comparison = cache_previous_chord_tuple[0].notes[0].compare(cache_previous_chord_tuple[1].notes[0])
+
+            if comparison == Note.NoteRelationship.PERFECT_FIFTH and previous_comparison == Note.NoteRelationship.PERFECT_FIFTH:
+                failureArray.append((CounterpointFailureType.PARALLEL_FIFTH_FAILURE, chord.time))
+            #FIXME might fail for unison
+            elif comparison == Note.NoteRelationship.UNISON_OR_OCTAVE and previous_comparison == Note.NoteRelationship.UNISON_OR_OCTAVE:
+                failureArray.append((CounterpointFailureType.PARALLEL_OCTAVE_FAILURE, chord.time))
+
+
+            cache_previous_chord_tuple = (chord, otherChord)
+
+            #Test for rule 4
+
+            #Direct octaves or fifths: if both voices are moving in the same direction (and the upper voice by jump),
+            # they should not move to a vertical octave or fifth.
+
+            #Test for rule 5
+
+            #Avoid the tritone — the diminished fifth or augmented fourth interval — both melodic (between notes
+            # in your melody) and harmonic (between your note and the given note above or below it).
+
+            #Test for rule 6
+
+            #Avoid augmented 2nds, both melodic (between notes in your melody) and harmonic (between your note
+            # and the given note above or below it).
+
+            #Test for rule 7
+
+            #Use notes in the key signature only. The only exception allowed is a sharp for the leading tone
+            # in a minor scale.
+
+            #Test for rule 8
+
+            #Leading tone resolution at cadence: if your second-to-last note is the leading tone,
+            # you should resolve that up a half-step to the tonic at the cadence.
+
+            #Test for rule 9
+
+            #Your counter-melody should move in steps, or in leaps of a 3rd, 4th, 5th, or 6th.
+
+            #Your counter-melody should not contain multiple successive large leaps (5th or 6th) in the same direction.
+
+            #Test for rule 10
+
+            #Your counter melody should not contain more than 3 leaps in a row.
+
+            #Test for rule 11
+            #Avoid simultaneous leaps in the same direction.
+
+            #Test for rule 12
+            #Simultaneous opposite leaps are only allowed if both voices leap by a third,
+            # or one voice leaps by a third while the other voice leaps by a fourth.
+
+
+
 
         return failureArray
 

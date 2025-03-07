@@ -1,9 +1,9 @@
 import mido
 from operator import itemgetter, attrgetter
 from enum import Enum, auto
+import typing
 
 class Score:
-
     def __init__(self, trackArray):
         self.trackArray = trackArray
         self.melodyArray = []
@@ -12,7 +12,6 @@ class Score:
             self.melodyArray.append(Melody.fromMidiTrack(track))
 
     def testFailures(self, melodyComparisonTuple):
-
         failureArray = []
 
         melody1 = self.melodyArray[melodyComparisonTuple[0]]
@@ -41,7 +40,6 @@ class Score:
 class Melody:
 
     def __init__(self, chordArray):
-
         self.chordArray = chordArray
 
     def getAtTime(self, time):

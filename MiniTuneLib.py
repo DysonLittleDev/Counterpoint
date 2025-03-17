@@ -2,17 +2,160 @@ import mido
 from operator import itemgetter, attrgetter
 from enum import Enum, auto
 import math
+from dataclasses import dataclass
+from typing import Self
+
+class CounterpointFailureType(Enum):
+    INTERVAL_NOT_CONSONANT_FAILURE = 0
+    COUNTERMELODY_LAST_NOTE_NOT_TONIC_FAILURE = 1
+    PARALLEL_FIFTH_FAILURE = 2
+    PARALLEL_OCTAVE_FAILURE = 3
+    DIRECT_OCTAVE_OR_FIFTH_FAILURE = 4
+    TRITONE_AVOIDANCE_FAILURE = 5
+    AUGMENTED_SECOND_AVOIDANCE_FAILURE = 6
+    KEY_SIGNATURE_ADHERENCE_FAILURE = 7
+    LEADING_TONE_RESOLUTION_AT_CADENCE_FAILURE = 8
+    COUNTERMELODY_STEPS_OR_LEAPS_FAILURE = 9
+    COUNTERMELODY_SUCCESSIVE_LEAPS_FAILURE = 10
+    SIMULTANEOUS_LEAPS_FAILURE = 11
+    SIMULTANEOUS_OPPOSITE_LEAPS_FAILURE = 12
+
+
+class Note:
+    class NoteRelationship(Enum):
+        UNISON_OR_OCTAVE = 0
+        MINOR_SECOND = 1
+        MAJOR_SECOND = 2
+        MINOR_THIRD = 3
+        MAJOR_THIRD = 4
+        PERFECT_FOURTH = 5
+        TRITONE = 6
+        PERFECT_FIFTH = 7
+        MINOR_SIXTH = 8
+        MAJOR_SIXTH = 9
+        MINOR_SEVENTH = 10
+        MAJOR_SEVENTH = 11
+
+
+    def __init__(self, value: int):
+        self.value = value
+
+
+    def relate(self, other: Self) -> NoteRelationship:
+        return Note.NoteRelationship((self.value - other.value) % 12)
+
+
+
+
+class Chord:
+
+    def __init__(self, notes: list[Note], time: int, duration: int):
+        self.notes = notes
+        self.time = time
+        self.duration = duration
+
+    def isParallel(self, other: Self) -> bool:
+        return self.time == other.time and self.duration == other.duration
+
+    def relate(self, other: Self) -> Note.NoteRelationship:
+        if len(self.notes) != 1 or len(other.notes) != 1:
+            raise Exception("Relating chords with multiple notes not supported!")
+
+        return self.notes[0].relate(other.notes[0])
+
+    # these are for time
+    def __lt__(self, other: Self):
+        return self.time < other.time
+    def __gt__(self, other: Self):
+        return self.time > other.time
+
+
+class Phrase:
+
+    def __init__(self, chordArray: list[Chord], startTime: list[Chord], duration: int):
+        self.chordArray = chordArray
+        self.startTime = startTime
+        self.duration = duration
+
+
+
+class PhrasePair:
+
+    def __init__(self, phrase1: Phrase, phrase2: Phrase):
+        self.phrase1 = phrase1
+        self.phrase2 = phrase2
+
+class Melody:
+
+    def __init__(self, chordArray: list[Chord]):
+
+        self.chordArray = chordArray
+
+    def getAtTime(self, time: int) -> Chord:
+        return next((x for x in self.chordArray if x.time == time), None)
+
+    @classmethod
+    def fromMidiTrack(cls, track: mido.MidiTrack) -> Self:
+
+        onOffMessageArray: list[mido.Message] = []
+
+        for message in track:
+            if message.type == 'note_on' or message.type == 'note_off':
+                onOffMessageArray.append(message)
+
+        onMessageCache: list[(mido.Message, int)] = []
+        chordArray: list[Chord] = []
+        runningTime = 0
+        for message in onOffMessageArray:
+            if message.type == 'note_on':
+                runningTime += message.time
+                onMessageCache.append((message, runningTime))
+
+
+            if message.type == 'note_off':
+                runningTime += message.time
+                for cached in onMessageCache:
+                    if cached[0].note == message.note:
+                        noteValues = [Note(message.note)]
+                        noteDuration = runningTime - cached[1]
+
+                        chordArray.append(Chord(noteValues, cached[1], noteDuration))
+
+                        onMessageCache.remove(cached)
+                        break
+
+        # cleanup simultaneous notes
+        # this is prolly a mess to read but trust me
+
+        newChordArray: list[Chord] = []
+
+        while len(chordArray) > 0:
+            currentChord = chordArray.pop(0)
+            foundFlag = False
+            for newChord in newChordArray:
+                if currentChord.time == newChord.time and currentChord.duration == newChord.duration:
+                    newChord.notes.extend(currentChord.notes)
+                    foundFlag = True
+                    break
+
+            if not foundFlag:
+                newChordArray.append(currentChord)
+
+
+        return Melody(newChordArray)
+
+
 
 class Score:
 
-    def __init__(self, trackArray, ticks_per_beat, time_signature):
+    def __init__(self, trackArray: list[mido.MidiTrack], ticks_per_beat: int, time_signature: tuple[int, int]):
         self.trackArray = trackArray
 
         #numerator is beats per measure
         #denominator is what note is a beat
         #ticks_per_beat is ticks per beat lol
 
-        self.melodyArray = []
+        self.melodyArray: list[Melody] = []
 
         if len(self.trackArray) != 2:
             raise Exception("Must have exactly two tracks!")
@@ -20,8 +163,8 @@ class Score:
         for track in self.trackArray:
             self.melodyArray.append(Melody.fromMidiTrack(track))
 
-        self.melody1Phrases = []
-        self.melody2Phrases = []
+        self.melody1Phrases: list[Phrase] = []
+        self.melody2Phrases: list[Phrase] = []
 
 
 
@@ -29,19 +172,19 @@ class Score:
 
 
 
-    def testFailures(self, melodyComparisonTuple):
+    def testFailures(self, melodyComparisonTuple: tuple[int, int]) -> list[tuple(CounterpointFailureType, int)]:
 
-        failureArray = []
+        failureArray: list[tuple[CounterpointFailureType, int]] = []
 
-        melody1 = self.melodyArray[melodyComparisonTuple[0]]
+        melody1  = self.melodyArray[melodyComparisonTuple[0]]
         melody2 = self.melodyArray[melodyComparisonTuple[1]]
 
-        cache_previous_chord_tuple = ()
+        cache_previous_chord_tuple: tuple[Chord, Chord]
 
         for chord in melody1.chordArray:
             otherChord = melody2.getAtTime(chord.time)
 
-            comparison = chord.compare(otherChord)
+            comparison = chord.relate(otherChord)
 
             #Test for rule 0
             #The interval between the given note and the note in your counter - melody should be consonant(major / minor
@@ -67,7 +210,8 @@ class Score:
             #Parallel octaves: if the previous harmonic interval was an octave,
             # your next note should not create the same harmonic interval again.
 
-            previous_comparison = cache_previous_chord_tuple[0].compare(cache_previous_chord_tuple[1])
+            #FIXME fails for first comparison
+            previous_comparison = cache_previous_chord_tuple[0].relate(cache_previous_chord_tuple[1])
 
             if comparison == Note.NoteRelationship.PERFECT_FIFTH and previous_comparison == Note.NoteRelationship.PERFECT_FIFTH:
                 failureArray.append((CounterpointFailureType.PARALLEL_FIFTH_FAILURE, chord.time))
@@ -126,137 +270,6 @@ class Score:
         return failureArray
 
 
-class Melody:
-
-    def __init__(self, chordArray):
-
-        self.chordArray = chordArray
-
-    def getAtTime(self, time):
-        return next((x for x in self.chordArray if x.time == time), None)
-
-    @classmethod
-    def fromMidiTrack(cls, track):
-
-        onOffMessageArray = []
-
-        for message in track:
-            if message.type == 'note_on' or message.type == 'note_off':
-                onOffMessageArray.append(message)
-
-        onMessageCache = []
-        chordArray = []
-        runningTime = 0
-        for message in onOffMessageArray:
-            if message.type == 'note_on':
-                runningTime += message.time
-                onMessageCache.append((message, runningTime))
-
-
-            if message.type == 'note_off':
-                runningTime += message.time
-                for cached in onMessageCache:
-                    if cached[0].note == message.note:
-                        noteValues = [Note(message.note)]
-                        noteDuration = runningTime - cached[1]
-
-                        chordArray.append(Chord(noteValues, cached[1], noteDuration))
-
-                        onMessageCache.remove(cached)
-                        break
-
-        # cleanup simultaneous notes
-        # this is prolly a mess to read but trust me
-
-        newChordArray = []
-
-        while len(chordArray) > 0:
-            currentChord = chordArray.pop(0)
-            foundFlag = False
-            for newChord in newChordArray:
-                if currentChord.time == newChord.time and currentChord.duration == newChord.duration:
-                    newChord.notes.extend(currentChord.notes)
-                    foundFlag = True
-                    break
-
-            if not foundFlag:
-                newChordArray.append(currentChord)
-
-
-        return Melody(newChordArray)
-
-class Chord:
-
-    def __init__(self, notes, time, duration):
-        self.notes = notes
-        self.time = time
-        self.duration = duration
-
-    def isParallel(self, other):
-        return self.time == other.time and self.duration == other.duration
-
-    def relate(self, other):
-        if len(self.notes) != 1 or len(other.notes) != 1:
-            raise Exception("Relating chords with multiple notes not supported!")
-
-        return self.notes[0].relate(other.notes[0])
-
-    # these are for time
-    def __lt__(self, other):
-        return self.time < other.time
-    def __gt__(self, other):
-        return self.time > other.time
-
-
-class Phrase:
-
-    def __init__(self, chordArray, startTime, duration):
-        self.chordArray = chordArray
-        self.startTime = startTime
-        self.duration = duration
 
 
 
-class PhrasePair:
-
-    def __init__(self, phrase1, phrase2):
-        self.phrase1 = phrase1
-        self.phrase2 = phrase2
-
-class Note:
-    class NoteRelationship(Enum):
-        UNISON_OR_OCTAVE = 0
-        MINOR_SECOND = 1
-        MAJOR_SECOND = 2
-        MINOR_THIRD = 3
-        MAJOR_THIRD = 4
-        PERFECT_FOURTH = 5
-        TRITONE = 6
-        PERFECT_FIFTH = 7
-        MINOR_SIXTH = 8
-        MAJOR_SIXTH = 9
-        MINOR_SEVENTH = 10
-        MAJOR_SEVENTH = 11
-
-
-    def __init__(self, value):
-        self.value = value
-
-
-    def relate(self, other):
-        return Note.NoteRelationship((self.value - other.value) % 12)
-
-class CounterpointFailureType(Enum):
-    INTERVAL_NOT_CONSONANT_FAILURE = 0
-    COUNTERMELODY_LAST_NOTE_NOT_TONIC_FAILURE = 1
-    PARALLEL_FIFTH_FAILURE = 2
-    PARALLEL_OCTAVE_FAILURE = 3
-    DIRECT_OCTAVE_OR_FIFTH_FAILURE = 4
-    TRITONE_AVOIDANCE_FAILURE = 5
-    AUGMENTED_SECOND_AVOIDANCE_FAILURE = 6
-    KEY_SIGNATURE_ADHERENCE_FAILURE = 7
-    LEADING_TONE_RESOLUTION_AT_CADENCE_FAILURE = 8
-    COUNTERMELODY_STEPS_OR_LEAPS_FAILURE = 9
-    COUNTERMELODY_SUCCESSIVE_LEAPS_FAILURE = 10
-    SIMULTANEOUS_LEAPS_FAILURE = 11
-    SIMULTANEOUS_OPPOSITE_LEAPS_FAILURE = 12

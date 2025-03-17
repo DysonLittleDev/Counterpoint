@@ -1,15 +1,40 @@
 import mido
 from operator import itemgetter, attrgetter
 from enum import Enum, auto
+<<<<<<< HEAD
 import typing
 
 class Score:
     def __init__(self, trackArray):
+=======
+import math
+
+class Score:
+
+    def __init__(self, trackArray, ticks_per_beat, time_signature):
+>>>>>>> 269fba909a5d433959da080d7366d7abd26d680a
         self.trackArray = trackArray
+
+        #numerator is beats per measure
+        #denominator is what note is a beat
+        #ticks_per_beat is ticks per beat lol
+
         self.melodyArray = []
+
+        if len(self.trackArray) != 2:
+            raise Exception("Must have exactly two tracks!")
 
         for track in self.trackArray:
             self.melodyArray.append(Melody.fromMidiTrack(track))
+
+        self.melody1Phrases = []
+        self.melody2Phrases = []
+
+
+
+
+
+
 
     def testFailures(self, melodyComparisonTuple):
         failureArray = []
@@ -22,7 +47,7 @@ class Score:
         for chord in melody1.chordArray:
             otherChord = melody2.getAtTime(chord.time)
 
-            comparison = chord.notes[0].compare(otherChord.notes[0])
+            comparison = chord.compare(otherChord)
 
             #Test for rule 0
             #The interval between the given note and the note in your counter - melody should be consonant(major / minor
@@ -48,7 +73,7 @@ class Score:
             #Parallel octaves: if the previous harmonic interval was an octave,
             # your next note should not create the same harmonic interval again.
 
-            previous_comparison = cache_previous_chord_tuple[0].notes[0].compare(cache_previous_chord_tuple[1].notes[0])
+            previous_comparison = cache_previous_chord_tuple[0].compare(cache_previous_chord_tuple[1])
 
             if comparison == Note.NoteRelationship.PERFECT_FIFTH and previous_comparison == Note.NoteRelationship.PERFECT_FIFTH:
                 failureArray.append((CounterpointFailureType.PARALLEL_FIFTH_FAILURE, chord.time))
@@ -175,6 +200,11 @@ class Chord:
     def isParallel(self, other):
         return self.time == other.time and self.duration == other.duration
 
+    def relate(self, other):
+        if len(self.notes) != 1 or len(other.notes) != 1:
+            raise Exception("Relating chords with multiple notes not supported!")
+
+        return self.notes[0].relate(other.notes[0])
 
     # these are for time
     def __lt__(self, other):
@@ -182,6 +212,21 @@ class Chord:
     def __gt__(self, other):
         return self.time > other.time
 
+
+class Phrase:
+
+    def __init__(self, chordArray, startTime, duration):
+        self.chordArray = chordArray
+        self.startTime = startTime
+        self.duration = duration
+
+
+
+class PhrasePair:
+
+    def __init__(self, phrase1, phrase2):
+        self.phrase1 = phrase1
+        self.phrase2 = phrase2
 
 class Note:
     class NoteRelationship(Enum):

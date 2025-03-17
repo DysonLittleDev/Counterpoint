@@ -12,10 +12,18 @@ class MiniMidi:
     def openFile(self, filename):
         return mido.MidiFile(filename=filename)
 
+    def getTempo(self, headerTrack):
+        return (x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'set_tempo').tempo
+
+    def getTimeSignature(self, headerTrack):
+        time_signature = (x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'time_signature')
+
+        return (time_signature.numerator, time_signature.denominator)
+
     def playTracks(self, file, trackNums):
         headerTrack = file.tracks[0]
-        tempo = [x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'set_tempo'][0].tempo
-        clocks_per_click = [x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'time_signature'][0].clocks_per_click
+        tempo = (x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'set_tempo').tempo
+        time_signature = (x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'time_signature')
 
 
         trackRange = []

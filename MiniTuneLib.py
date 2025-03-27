@@ -172,7 +172,7 @@ class Score:
 
 
 
-    def testFailures(self, melodyComparisonTuple: tuple[int, int]) -> list[tuple(CounterpointFailureType, int)]:
+    def testFailures(self, melodyComparisonTuple: tuple[int, int]) -> list[tuple[CounterpointFailureType, int]]:
 
         failureArray: list[tuple[CounterpointFailureType, int]] = []
 

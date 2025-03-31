@@ -23,7 +23,7 @@ class CounterpointFailureType(Enum):
 
 class Note:
     class NoteRelationship(Enum):
-        UNISON_OR_OCTAVE = 0
+        OCTAVE = 0
         MINOR_SECOND = 1
         MAJOR_SECOND = 2
         MINOR_THIRD = 3
@@ -35,6 +35,7 @@ class Note:
         MAJOR_SIXTH = 9
         MINOR_SEVENTH = 10
         MAJOR_SEVENTH = 11
+        UNISON = 12 # this and octave are "swapped" for math reasons
 
 
     def __init__(self, value: int):
@@ -42,7 +43,7 @@ class Note:
 
 
     def relate(self, other: Self) -> NoteRelationship:
-        return Note.NoteRelationship((self.value - other.value) % 12)
+        return 12 if self.value == other.value else Note.NoteRelationship((self.value - other.value) % 12)
 
 
 
@@ -53,6 +54,7 @@ class Chord:
         self.notes = notes
         self.time = time
         self.duration = duration
+        self.value = notes[0].value
 
     def isParallel(self, other: Self) -> bool:
         return self.time == other.time and self.duration == other.duration
@@ -60,6 +62,7 @@ class Chord:
     def relate(self, other: Self) -> Note.NoteRelationship:
         if len(self.notes) != 1 or len(other.notes) != 1:
             raise Exception("Relating chords with multiple notes not supported!")
+            # FIXME then support them lol
 
         return self.notes[0].relate(other.notes[0])
 
@@ -72,18 +75,22 @@ class Chord:
 
 class Phrase:
 
-    def __init__(self, chordArray: list[Chord], startTime: list[Chord], duration: int):
+    def __init__(self, chordArray: list[Chord], startTime: int, duration: int):
         self.chordArray = chordArray
         self.startTime = startTime
         self.duration = duration
 
+    def fully_within(self, chord: Chord) -> bool:
+        return self.startTime <= chord.time and self.startTime + self.duration >= chord.time + chord.duration
 
 
 class PhrasePair:
 
-    def __init__(self, phrase1: Phrase, phrase2: Phrase):
-        self.phrase1 = phrase1
-        self.phrase2 = phrase2
+    def __init__(self, melodyPhrase: Phrase, countermelodyPhrase: Phrase):
+        self.melodyPhrase = melodyPhrase
+        self.countermelodyPhrase = countermelodyPhrase
+        self.startTime = melodyPhrase.startTime
+        self.duration = melodyPhrase.duration
 
 class Melody:
 
@@ -155,6 +162,10 @@ class Score:
         #denominator is what note is a beat
         #ticks_per_beat is ticks per beat lol
 
+        self.beats_per_measure = time_signature[0]
+        self.ticks_per_beat = ticks_per_beat
+        self.ticks_per_measure = self.beats_per_measure * self.ticks_per_beat
+
         self.melodyArray: list[Melody] = []
 
         if len(self.trackArray) != 2:
@@ -163,40 +174,55 @@ class Score:
         for track in self.trackArray:
             self.melodyArray.append(Melody.fromMidiTrack(track))
 
-        self.melody1Phrases: list[Phrase] = []
-        self.melody2Phrases: list[Phrase] = []
+        self.melodyPhrases: list[Phrase] = []
+        self.countermelodyPhrases: list[Phrase] = []
+        self.phrasePairs: list[PhrasePair] = []
+
+        for chord in self.melodyArray[0].chordArray:
+            melodyPhrase = Phrase([chord], chord.time, chord.duration)
+            counterChordList = []
+            for counterChord in self.melodyArray[1].chordArray: # slightly inefficient- could pop chords from chordArray
+                if melodyPhrase.fully_within(counterChord):
+                    counterChordList.append(counterChord)
+
+            counterPhrase = Phrase(counterChordList, chord.time, chord.duration)
+
+            self.melodyPhrases.append(melodyPhrase)
+            self.countermelodyPhrases.append(counterPhrase)
+            self.phrasePairs.append(PhrasePair(melodyPhrase, counterPhrase))
+
+        self.phrasePairs.sort(key=lambda x: x.startTime)
 
 
 
 
-
-
-
-    def testFailures(self, melodyComparisonTuple: tuple[int, int]) -> list[tuple[CounterpointFailureType, int]]:
+    def testFailures(self, phrasePairs: list[PhrasePair]) -> list[tuple[CounterpointFailureType, int]]:
 
         failureArray: list[tuple[CounterpointFailureType, int]] = []
 
-        melody1  = self.melodyArray[melodyComparisonTuple[0]]
-        melody2 = self.melodyArray[melodyComparisonTuple[1]]
 
-        cache_previous_chord_tuple: tuple[Chord, Chord]
 
-        for chord in melody1.chordArray:
-            otherChord = melody2.getAtTime(chord.time)
 
-            comparison = chord.relate(otherChord)
+        for i, phrasePair in enumerate(phrasePairs):
+            melodyPhrase = phrasePair.melodyPhrase
+            melodyPhraseFirstChord = melodyPhrase.chordArray[0]
+            countermelodyPhrase = phrasePair.countermelodyPhrase
 
             #Test for rule 0
             #The interval between the given note and the note in your counter - melody should be consonant(major / minor
             #3rd or 6th, perfect unison, 5th, or octave, or a compound form).
 
-            if not (comparison == Note.NoteRelationship.UNISON_OR_OCTAVE
-                or comparison == Note.NoteRelationship.MAJOR_THIRD
-                or comparison == Note.NoteRelationship.MINOR_THIRD
-                or comparison == Note.NoteRelationship.MAJOR_SIXTH
-                or comparison == Note.NoteRelationship.MINOR_SIXTH
-                or comparison == Note.NoteRelationship.PERFECT_FIFTH):
-                failureArray.append((CounterpointFailureType.INTERVAL_NOT_CONSONANT_FAILURE, chord.time))
+            for chord in countermelodyPhrase.chordArray:
+                comparison = melodyPhraseFirstChord.relate(chord)
+                #FIXME this rule only applies to the first and middle chord?
+
+                if not (comparison == Note.NoteRelationship.UNISON_OR_OCTAVE
+                    or comparison == Note.NoteRelationship.MAJOR_THIRD
+                    or comparison == Note.NoteRelationship.MINOR_THIRD
+                    or comparison == Note.NoteRelationship.MAJOR_SIXTH
+                    or comparison == Note.NoteRelationship.MINOR_SIXTH
+                    or comparison == Note.NoteRelationship.PERFECT_FIFTH):
+                    failureArray.append((CounterpointFailureType.INTERVAL_NOT_CONSONANT_FAILURE, chord.time))
 
             #Test for rule 1
             #If the counter - melody is above the given melody, then the last note of the counter - melody should
@@ -210,22 +236,74 @@ class Score:
             #Parallel octaves: if the previous harmonic interval was an octave,
             # your next note should not create the same harmonic interval again.
 
-            #FIXME fails for first comparison
-            previous_comparison = cache_previous_chord_tuple[0].relate(cache_previous_chord_tuple[1])
-
-            if comparison == Note.NoteRelationship.PERFECT_FIFTH and previous_comparison == Note.NoteRelationship.PERFECT_FIFTH:
-                failureArray.append((CounterpointFailureType.PARALLEL_FIFTH_FAILURE, chord.time))
-            #FIXME might fail for unison
-            elif comparison == Note.NoteRelationship.UNISON_OR_OCTAVE and previous_comparison == Note.NoteRelationship.UNISON_OR_OCTAVE:
-                failureArray.append((CounterpointFailureType.PARALLEL_OCTAVE_FAILURE, chord.time))
+            currentInterval = melodyPhraseFirstChord.relate(countermelodyPhrase.chordArray[0])
 
 
-            cache_previous_chord_tuple = (chord, otherChord)
+            if i > 0:
+                previousInterval = phrasePairs[i - 1].melodyPhrase.chordArray[0].relate(phrasePairs[i - 1].countermelodyPhrase.chordArray[0])
+                if currentInterval == previousInterval:
+                    if currentInterval == Note.NoteRelationship.PERFECT_FIFTH:
+                        failureArray.append((CounterpointFailureType.PARALLEL_FIFTH_FAILURE, melodyPhraseFirstChord.time))
+                    elif currentInterval == Note.NoteRelationship.UNISON_OR_OCTAVE:
+                        failureArray.append((CounterpointFailureType.PARALLEL_OCTAVE_FAILURE, melodyPhraseFirstChord.time))
+
+
 
             #Test for rule 4
 
             #Direct octaves or fifths: if both voices are moving in the same direction (and the upper voice by jump),
             # they should not move to a vertical octave or fifth.
+
+            #FIXME doesn't check for jumps!
+            #FIXME edge chords are first or last note in measure?
+
+            melodyChordExtendedList = []
+            countermelodyChordExtendedList = []
+
+            if i > 0: melodyChordExtendedList.append(phrasePairs[i - 1].melodyPhrase.chordArray[-1])
+            melodyChordExtendedList.extend(melodyPhrase.chordArray)
+            if i < len(phrasePairs) - 1: melodyChordExtendedList.append(phrasePairs[i + 1].melodyPhrase.chordArray[0])
+
+            if i > 0: countermelodyChordExtendedList.append(phrasePairs[i - 1].countermelodyPhrase.chordArray[-1])
+            countermelodyChordExtendedList.extend(countermelodyPhrase.chordArray)
+            if i < len(phrasePairs) - 1: countermelodyChordExtendedList.append(phrasePairs[i + 1].countermelodyPhrase.chordArray[0])
+
+            #FIXME sanitize inputs
+
+            sameDirection = True
+
+            rule4FailureList = [] #only use if they end up being parallel
+
+            melodyDirection = melodyChordExtendedList[0].value - melodyChordExtendedList[1].value
+            countermelodyDirection = melodyChordExtendedList[0].value - melodyChordExtendedList[1].value
+
+            for j in range(len(melodyChordExtendedList) - 1): #technically redundant on first comparison
+                firstChord = melodyChordExtendedList[j + 1]
+                secondChord = melodyChordExtendedList[j + 2]
+                if (melodyDirection > 0 and firstChord.value < secondChord.value) or \
+                        (melodyDirection < 0 and firstChord.value > secondChord.value):
+                    relation = firstChord.relate(secondChord)
+                    if relation == Note.NoteRelationship.PERFECT_FIFTH or relation == Note.NoteRelationship.OCTAVE:
+                        rule4FailureList.append((CounterpointFailureType.DIRECT_OCTAVE_OR_FIFTH_FAILURE, firstChord.time))
+                else:
+                    sameDirection = False
+                    break
+
+            for j in range(len(countermelodyChordExtendedList) - 1):  # technically redundant on first comparison
+                firstChord = countermelodyChordExtendedList[j + 1]
+                secondChord = countermelodyChordExtendedList[j + 2]
+                if (countermelodyDirection > 0 and firstChord.value < secondChord.value) or \
+                        (countermelodyDirection < 0 and firstChord.value > secondChord.value):
+                    relation = firstChord.relate(secondChord)
+                    if relation == Note.NoteRelationship.PERFECT_FIFTH or relation == Note.NoteRelationship.OCTAVE:
+                        rule4FailureList.append(
+                            (CounterpointFailureType.DIRECT_OCTAVE_OR_FIFTH_FAILURE, firstChord.time))
+                else:
+                    sameDirection = False
+                    break
+
+            if sameDirection:
+                failureArray.extend(rule4FailureList)
 
             #Test for rule 5
 

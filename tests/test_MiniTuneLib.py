@@ -1,6 +1,6 @@
 from pathlib import Path
 import src.MiniMidi as MiniMidi
-import src.MiniTuneLib
+import src.MiniTuneLib as MiniTuneLib
 
 
 def get_score(filepath: str):

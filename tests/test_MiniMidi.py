@@ -1,5 +1,5 @@
 from pathlib import Path
-import MiniMidi
+import src.MiniMidi as MiniMidi
 import mido
 
 # NOTE: this test uses midi files in tests/midi-tests. i have not added any

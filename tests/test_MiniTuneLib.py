@@ -1,6 +1,6 @@
 from pathlib import Path
-import MiniMidi
-import MiniTuneLib
+import src.MiniMidi as MiniMidi
+import src.MiniTuneLib
 
 
 def get_score(filepath: str):
@@ -10,6 +10,7 @@ def get_score(filepath: str):
         filepath (str): path to a valid .score file
     """
     return
+
 
 '''
 NOTE: This test uses midi files in tests/midi-tests. I have not added any
@@ -21,6 +22,8 @@ for midi file "midi1.mid", there should also be "midi1.score" that has midi1's c
 Until the format of score is finalized, there is a function stub named get_score() that will
 be used in the unit test below
 '''
+
+
 def test_midiScore():
     test_dir = Path("tests/midi-tests")
     test_files: list[Path] = []
@@ -41,7 +44,7 @@ def test_midiScore():
         mini = MiniMidi.MiniMidi()
         file = mini.openFile(test)
 
-        # TODO: this is supposed to be where test is scored and where 
+        # TODO: this is supposed to be where test is scored and where
         #       the correct score is read
         try:
             actual_score = MiniTuneLib.Score(file.tracks)
@@ -59,4 +62,4 @@ def test_midiScore():
             )
             not_failed = False
 
-    assert(not_failed)
+    assert (not_failed)

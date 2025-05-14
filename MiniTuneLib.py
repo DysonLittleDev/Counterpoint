@@ -1,18 +1,11 @@
 import mido
 from operator import itemgetter, attrgetter
 from enum import Enum, auto
-<<<<<<< HEAD
-import typing
-
-class Score:
-    def __init__(self, trackArray):
-=======
 import math
 
 class Score:
 
     def __init__(self, trackArray, ticks_per_beat, time_signature):
->>>>>>> 269fba909a5d433959da080d7366d7abd26d680a
         self.trackArray = trackArray
 
         #numerator is beats per measure

@@ -1,6 +1,9 @@
+import sys
+
 import mido
 import time
 import math
+import string
 
 
 class MiniMidi:
@@ -9,25 +12,25 @@ class MiniMidi:
 
         self.port = mido.open_output()
 
-    def openFile(self, filename):
+    def openFile(self, filename: string) -> mido.MidiFile:
         return mido.MidiFile(filename=filename)
 
-    def getTempo(self, headerTrack):
+    def getTempo(self, headerTrack: mido.MidiTrack) -> int:
         return (x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'set_tempo').tempo
 
-    def getTimeSignature(self, headerTrack):
+    def getTimeSignature(self, headerTrack: mido.MidiTrack) -> tuple[int, int]:
         time_signature = (x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'time_signature')
 
         return (time_signature.numerator, time_signature.denominator)
 
-    def playTracks(self, file, trackNums):
+    def playTracks(self, file: mido.MidiFile, trackNums: list[int]):
         headerTrack = file.tracks[0]
         tempo = (x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'set_tempo').tempo
         time_signature = (x for x in headerTrack if isinstance(x, mido.MetaMessage) and x.type == 'time_signature')
 
 
-        trackRange = []
-        trackCountup = []
+        trackRange: list[mido.MidiTrack] = []
+        trackCountup: list[int] = []
         for num in trackNums:
             trackRange.append(file.tracks[num])
             trackCountup.append(0)
@@ -35,13 +38,13 @@ class MiniMidi:
 
         while any(len(x) > 0 for x in trackRange):
 
-            def popMessage(message):
+            def popMessage(message: mido.Message):
                 if isinstance(message, mido.MetaMessage):
                     print(message)
                 else:
                     self.port.send(message)
 
-            shortestWait = math.inf
+            shortestWait: int = sys.maxsize # infinity?
 
             for i, track in enumerate(trackRange):
 
